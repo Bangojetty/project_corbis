@@ -40,7 +40,10 @@ android {
 }
 
 dependencies {
-
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling:")
+    implementation("androidx.compose.foundation:foundation:")
+    implementation("androidx.compose.material3:material3:")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
