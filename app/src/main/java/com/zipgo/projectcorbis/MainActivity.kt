@@ -1,18 +1,23 @@
+// app/src/main/java/com/zipgo/projectcorbis/MainActivity.kt
 package com.zipgo.projectcorbis
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,15 +27,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.center
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.zipgo.projectcorbis.ui.theme.Project_CorbisTheme
-import kotlin.math.roundToInt
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
+
+data class JoystickPosition(
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val distance: Float = 0f,
+    val angle: Float = 0f
+)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,17 +55,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             Project_CorbisTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        AnalogJoystick { x, y ->
-                            Log.d("Joystick", "Move: x=$x, y=$y")
-                            // 🚀 This is where you'll send x/y values to the drone later
-                        }
-                    }
+                    JoystickDemo(
+                        modifier = Modifier.padding(innerPadding)
+                    )
                 }
             }
         }
@@ -57,71 +65,153 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
+fun JoystickDemo(modifier: Modifier = Modifier) {
+    var joystickPosition by remember { mutableStateOf(JoystickPosition()) }
+
+    Column(
         modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    Project_CorbisTheme {
-        Greeting("Android")
-    }
-}
-
-@Composable
-fun AnalogJoystick(
-    baseRadiusDp: Float = 100f,
-    handleRadiusDp: Float = 30f,
-    onMove: (x: Float, y: Float) -> Unit
-) {
-    val density = LocalDensity.current
-    val baseRadiusPx = with(density) { baseRadiusDp.dp.toPx() }
-    val handleRadiusPx = with(density) { handleRadiusDp.dp.toPx() }
-
-    var handleOffset by remember { mutableStateOf(Offset.Zero) }
-
-    Box(
-        modifier = Modifier
-            .size((baseRadiusDp * 2).dp)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragEnd = {
-                        handleOffset = Offset.Zero
-                        onMove(0f, 0f)
-                    },
-                    onDrag = { change, dragAmount ->
-                        val newOffset = handleOffset + dragAmount
-
-                        val clampedOffset = if (newOffset.getDistance() > baseRadiusPx - handleRadiusPx) {
-                            // Clamp to the edge of the base circle
-                            newOffset / newOffset.getDistance() * (baseRadiusPx - handleRadiusPx)
-                        } else newOffset
-
-                        handleOffset = clampedOffset
-
-                        // Normalize to -1 to 1
-                        onMove(
-                            clampedOffset.x / (baseRadiusPx - handleRadiusPx),
-                            clampedOffset.y / (baseRadiusPx - handleRadiusPx)
-                        )
-                    }
-                )
-            }
-            .background(Color.LightGray, shape = CircleShape),
-        contentAlignment = Alignment.Center
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Box(
-            modifier = Modifier
-                .offset {
-                    IntOffset(handleOffset.x.roundToInt(), handleOffset.y.roundToInt())
-                }
-                .size((handleRadiusDp * 2).dp)
-                .background(Color.DarkGray, shape = CircleShape)
+        // Display joystick values
+        Text(
+            text = "Joystick Position",
+            style = MaterialTheme.typography.headlineMedium
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(text = "X: ${"%.2f".format(joystickPosition.x)}")
+        Text(text = "Y: ${"%.2f".format(joystickPosition.y)}")
+        Text(text = "Distance: ${"%.2f".format(joystickPosition.distance)}")
+        Text(text = "Angle: ${"%.1f".format(Math.toDegrees(joystickPosition.angle.toDouble()))}°")
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Joystick controller
+        JoystickController(
+            modifier = Modifier.size(200.dp),
+            onPositionChanged = { position ->
+                joystickPosition = position
+            }
         )
     }
 }
 
+@Composable
+fun JoystickController(
+    modifier: Modifier = Modifier,
+    onPositionChanged: (JoystickPosition) -> Unit = {}
+) {
+    val density = LocalDensity.current
+    var centerPosition by remember { mutableStateOf(Offset.Zero) }
+    var knobPosition by remember { mutableStateOf(Offset.Zero) }
+    var isDragging by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(Color.Gray.copy(alpha = 0.3f))
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            isDragging = true
+                            centerPosition = Offset(size.width / 2f, size.height / 2f)
+                            knobPosition = offset
+                        },
+                        onDragEnd = {
+                            isDragging = false
+                            knobPosition = centerPosition
+                            onPositionChanged(JoystickPosition())
+                        },
+                        onDrag = { _, dragAmount ->
+                            val newPosition = knobPosition + dragAmount
+                            val distance = (newPosition - centerPosition).getDistance()
+                            val maxDistance = size.width / 2f * 0.8f // 80% of radius
+
+                            knobPosition = if (distance <= maxDistance) {
+                                newPosition
+                            } else {
+                                val angle = atan2(
+                                    newPosition.y - centerPosition.y,
+                                    newPosition.x - centerPosition.x
+                                )
+                                Offset(
+                                    centerPosition.x + cos(angle) * maxDistance,
+                                    centerPosition.y + sin(angle) * maxDistance
+                                )
+                            }
+
+                            // Calculate normalized position (-1 to 1)
+                            val normalizedX = (knobPosition.x - centerPosition.x) / maxDistance
+                            val normalizedY = (knobPosition.y - centerPosition.y) / maxDistance
+                            val normalizedDistance = min(distance / maxDistance, 1f)
+                            val angle = atan2(normalizedY, normalizedX)
+
+                            onPositionChanged(
+                                JoystickPosition(
+                                    x = normalizedX,
+                                    y = normalizedY,
+                                    distance = normalizedDistance,
+                                    angle = angle
+                                )
+                            )
+                        }
+                    )
+                }
+        ) {
+            val center = size.center
+            val radius = size.minDimension / 2f
+            val knobRadius = radius * 0.2f
+
+            if (centerPosition == Offset.Zero) {
+                centerPosition = center
+                knobPosition = center
+            }
+
+            // Draw outer circle (joystick base)
+            drawCircle(
+                color = Color.Gray,
+                radius = radius,
+                center = center,
+                alpha = 0.5f
+            )
+
+            // Draw inner circle (movement area)
+            drawCircle(
+                color = Color.Gray,
+                radius = radius * 0.8f,
+                center = center,
+                alpha = 0.2f
+            )
+
+            // Draw knob
+            drawCircle(
+                color = if (isDragging) Color.Blue else Color.DarkGray,
+                radius = knobRadius,
+                center = knobPosition
+            )
+
+            // Draw knob border
+            drawCircle(
+                color = Color.White,
+                radius = knobRadius,
+                center = knobPosition,
+                alpha = 0.8f,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4.dp.toPx())
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun JoystickPreview() {
+    Project_CorbisTheme {
+        JoystickDemo()
+    }
+}
