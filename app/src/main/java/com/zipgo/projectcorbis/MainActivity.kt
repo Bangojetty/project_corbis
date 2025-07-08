@@ -1,6 +1,7 @@
 // app/src/main/java/com/zipgo/projectcorbis/MainActivity.kt
 package com.zipgo.projectcorbis
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,6 +12,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -51,11 +53,15 @@ data class JoystickPosition(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Force landscape mode
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+
         enableEdgeToEdge()
         setContent {
             Project_CorbisTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    JoystickDemo(
+                    DualJoystick(
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -65,34 +71,31 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun JoystickDemo(modifier: Modifier = Modifier) {
-    var joystickPosition by remember { mutableStateOf(JoystickPosition()) }
+fun DualJoystick(modifier: Modifier = Modifier) {
+    var leftJoystickPosition by remember { mutableStateOf(JoystickPosition()) }
+    var rightJoystickPosition by remember { mutableStateOf(JoystickPosition()) }
 
-    Column(
+    Row(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(32.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Display joystick values
-        Text(
-            text = "Joystick Position",
-            style = MaterialTheme.typography.headlineMedium
+        // Left Joystick
+        JoystickController(
+            modifier = Modifier.size(200.dp),
+            false,
+            onPositionChanged = { position ->
+                leftJoystickPosition = position
+            }
         )
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "X: ${"%.2f".format(joystickPosition.x)}")
-        Text(text = "Y: ${"%.2f".format(joystickPosition.y)}")
-        Text(text = "Distance: ${"%.2f".format(joystickPosition.distance)}")
-        Text(text = "Angle: ${"%.1f".format(Math.toDegrees(joystickPosition.angle.toDouble()))}°")
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Joystick controller
+        // Right Joystick
         JoystickController(
             modifier = Modifier.size(200.dp),
             onPositionChanged = { position ->
-                joystickPosition = position
+                rightJoystickPosition = position
             }
         )
     }
@@ -101,6 +104,7 @@ fun JoystickDemo(modifier: Modifier = Modifier) {
 @Composable
 fun JoystickController(
     modifier: Modifier = Modifier,
+    resetOnRelease: Boolean = true,
     onPositionChanged: (JoystickPosition) -> Unit = {}
 ) {
     val density = LocalDensity.current
@@ -125,8 +129,10 @@ fun JoystickController(
                         },
                         onDragEnd = {
                             isDragging = false
-                            knobPosition = centerPosition
-                            onPositionChanged(JoystickPosition())
+                            if(resetOnRelease) {
+                                knobPosition = centerPosition
+                                onPositionChanged(JoystickPosition())
+                            }
                         },
                         onDrag = { _, dragAmount ->
                             val newPosition = knobPosition + dragAmount
@@ -212,6 +218,6 @@ fun JoystickController(
 @Composable
 fun JoystickPreview() {
     Project_CorbisTheme {
-        JoystickDemo()
+        DualJoystick()
     }
 }
